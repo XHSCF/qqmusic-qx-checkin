@@ -149,6 +149,17 @@ try {
 
             const alreadyDone =
               (isSuccess && total === 0) ||
+              (result &&
+                result.code === 0 &&
+                requestResult &&
+                requestResult.code === 0 &&
+                data &&
+                data.Ret === 20019) ||
+              responseText.indexOf("今天已经领取过") !== -1 ||
+              responseText.indexOf("今日已经领取过") !== -1 ||
+              responseText.indexOf("已经领取过") !== -1 ||
+              responseText.indexOf("今日已签到") !== -1 ||
+              responseText.indexOf("今天已签到") !== -1 ||
               responseText.indexOf("已签到") !== -1 ||
               responseText.indexOf("已经完成") !== -1 ||
               responseText.indexOf("already") !== -1;
