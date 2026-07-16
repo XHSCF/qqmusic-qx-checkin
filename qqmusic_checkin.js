@@ -39,6 +39,41 @@ function getResponseText(value) {
   return messages.join(" ").toLowerCase();
 }
 
+function getDiagnosticField(value, key) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !Object.prototype.hasOwnProperty.call(value, key) ||
+    value[key] === undefined
+  ) {
+    return null;
+  }
+  return value[key];
+}
+
+function formatDiagnosticValue(value) {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  return String(value);
+}
+
+function sanitizeDiagnosticMessage(value) {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+
+  return String(value)
+    .replace(/\s+/g, " ")
+    .replace(/https?:\/\/\S+/gi, "[redacted]")
+    .replace(
+      /\b(cookie|token|uin|qq|qqmusic_key|sign)\b\s*[:=]\s*[^\s|,;]+/gi,
+      "$1=[redacted]"
+    )
+    .replace(/\b[1-9][0-9]{4,11}\b/g, "[redacted]")
+    .slice(0, 80);
+}
+
 try {
   const stored = $prefs.valueForKey(STORAGE_KEY);
   if (!stored) {
@@ -154,7 +189,22 @@ try {
               return;
             }
 
-            finish("QQ音乐签到失败", "接口返回异常，请稍后重试");
+            const httpStatus =
+              response.statusCode !== null &&
+              response.statusCode !== undefined
+                ? response.statusCode
+                : response.status;
+            const diagnosticMessage = [
+              "HTTP=" + formatDiagnosticValue(httpStatus),
+              "code=" + formatDiagnosticValue(getDiagnosticField(result, "code")),
+              "reqCode=" +
+                formatDiagnosticValue(getDiagnosticField(requestResult, "code")),
+              "Ret=" + formatDiagnosticValue(getDiagnosticField(data, "Ret")),
+              "Total=" + formatDiagnosticValue(getDiagnosticField(data, "Total")),
+              "Msg=" + sanitizeDiagnosticMessage(getDiagnosticField(data, "Msg"))
+            ].join(" | ");
+
+            finish("QQ音乐签到诊断", diagnosticMessage);
           } catch (error) {
             finish("QQ音乐签到失败", "响应解析失败，请重新抓取签到凭证");
           }
