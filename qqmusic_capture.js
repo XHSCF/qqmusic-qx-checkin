@@ -47,11 +47,17 @@ const STORAGE_KEY = "qqmusic_checkin_request";
       return "";
     }
 
+    const cookie = getHeader("Cookie");
+    if (!cookie) {
+      throw new Error("MISSING_COOKIE");
+    }
+
     const savedRequest = {
+      version: 1,
       url: url,
       method: method,
       headers: {
-        Cookie: getHeader("Cookie"),
+        Cookie: cookie,
         "User-Agent": getHeader("User-Agent"),
         Referer: getHeader("Referer"),
         Origin: getHeader("Origin"),

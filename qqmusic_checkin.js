@@ -1,4 +1,6 @@
 const STORAGE_KEY = "qqmusic_checkin_request";
+const MAX_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 1200;
 let finished = false;
 
 function finish(title, message) {
@@ -74,6 +76,40 @@ function sanitizeDiagnosticMessage(value) {
     .slice(0, 80);
 }
 
+function delay(milliseconds) {
+  return new Promise(function wait(resolve) {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function fetchWithRetry(options, attempt) {
+  const currentAttempt = attempt || 1;
+
+  return $task.fetch(options).then(
+    function handleFetchResponse(response) {
+      const status = Number(response.statusCode || response.status || 0);
+      const retryableStatus = status === 429 || status >= 500;
+
+      if (retryableStatus && currentAttempt < MAX_ATTEMPTS) {
+        return delay(RETRY_DELAY_MS).then(function retryAfterStatus() {
+          return fetchWithRetry(options, currentAttempt + 1);
+        });
+      }
+
+      return response;
+    },
+    function handleFetchError(error) {
+      if (currentAttempt >= MAX_ATTEMPTS) {
+        return Promise.reject(error);
+      }
+
+      return delay(RETRY_DELAY_MS).then(function retryAfterError() {
+        return fetchWithRetry(options, currentAttempt + 1);
+      });
+    }
+  );
+}
+
 try {
   const stored = $prefs.valueForKey(STORAGE_KEY);
   if (!stored) {
@@ -87,7 +123,9 @@ try {
       !savedRequest ||
       !savedRequest.url ||
       String(savedRequest.method || "").toUpperCase() !== "POST" ||
-      !savedRequest.body
+      !savedRequest.body ||
+      !savedRequest.headers ||
+      !savedRequest.headers.Cookie
     ) {
       finish(
         "QQ音乐签到失败",
@@ -111,7 +149,7 @@ try {
         }
       }
 
-      $task.fetch({
+      fetchWithRetry({
         url: String(savedRequest.url),
         method: "POST",
         headers: headers,
@@ -124,6 +162,19 @@ try {
               finish(
                 "QQ音乐签到失败",
                 "登录凭证已失效，请重新进入会员签到页面刷新"
+              );
+              return;
+            }
+
+            if (status === 429) {
+              finish("QQ音乐签到失败", "请求过于频繁，请稍后再试");
+              return;
+            }
+
+            if (status < 200 || status >= 300) {
+              finish(
+                "QQ音乐签到失败",
+                "服务器返回 HTTP " + (status || "未知")
               );
               return;
             }
